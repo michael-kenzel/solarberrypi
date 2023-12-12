@@ -1,0 +1,30 @@
+cflags = -std=c++23 -Wall -Wextra -Wno-missing-field-initializers -g -O0
+
+rule cppdeps
+   command = g++ -MD -MF $out $cflags -E -x c++ $in > /dev/null
+
+rule cpp
+   # depfile = $out.d
+   command = g++ $cflags -fmodules-ts -c -x c++ $in -o $out
+
+rule link
+   command = g++ $in -o $out
+
+rule dtc
+   command = dtc -@ -I dts -O dtb -o $out $in
+
+rule compile_commands
+   command = ninja -t compdb > $out
+
+build io.o: cpp ../src/io.ixx
+build io-impl.o: cpp ../src/io.cpp | io.o
+build gpio.o: cpp ../src/gpio.ixx | io.o io-impl.o
+build it8951.o: cpp ../src/it8951.ixx | gpio.o
+build it8951-impl.o: cpp ../src/it8951.cpp | it8951.o
+build main.o: cpp ../src/main.cpp | it8951.o
+
+build it8951.dtbo: dtc ../src/it8951/it8951.dts
+
+build compile_commands.json: compile_commands build.ninja
+
+build displaytest: link main.o it8951.o it8951-impl.o gpio.o io.o io-impl.o

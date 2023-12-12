@@ -1,0 +1,28 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&spi0>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			it8951@0 {
+				reg = <0>;
+				compatible = "waveshare,it8951";
+				spi-max-frequency = <12000000>;
+				RESET_N-gpios = <&gpio 17 1>;
+				HOST_HRDY-gpios = <&gpio 24 0>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&spidev0>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+};
