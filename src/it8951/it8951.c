@@ -17,6 +17,7 @@
 #include <linux/printk.h>
 
 #define MAX_DEVICES 64
+#define FIFO_SIZE 2048
 
 static struct class device_class = {
 	.name = "it8951",
@@ -26,6 +27,7 @@ struct device_data {
 	struct mutex lock;
 	struct gpio_desc* pin_hrdy;
 	struct spi_device* dev;
+	__u8* buf;
 	struct gpio_desc* pin_rset;
 	dev_t devnum;
 	struct list_head node;
@@ -35,8 +37,75 @@ struct device_data {
 static DEFINE_MUTEX(devices_lock);
 static LIST_HEAD(devices);
 
+static int it8951_open(struct inode* inode, struct file* file)
+{
+	int result = 0;
+	struct device_data* node, * data = NULL;
+
+	mutex_lock(&devices_lock);
+
+	list_for_each_entry(node, &devices, node) {
+		if (node->devnum == inode->i_rdev) {
+			data = node;
+			break;
+		}
+	}
+
+	if (!data) {
+		result = -ENXIO;
+		goto failed_find_device;
+	}
+
+	mutex_lock(&data->lock);
+
+	dev_info(&data->dev->dev, "attempting to open device\n");
+
+	if (data->buf != 0) {
+		result = -EBUSY;
+		goto error_device_in_use;
+	}
+
+	if (!(data->buf = kmalloc(2 * FIFO_SIZE, GFP_KERNEL))) {
+		dev_err(&data->dev->dev, "failed to allocate buffer memory\n");
+		result = -ENOMEM;
+		goto failed_alloc_buffer;
+	}
+
+	file->private_data = data;
+	stream_open(inode, file);
+	++data->refs;
+
+error_device_in_use:
+failed_alloc_buffer:
+	mutex_unlock(&data->lock);
+failed_find_device:
+	mutex_unlock(&devices_lock);
+	return result;
+}
+
+static int it8951_release(struct inode* inode, struct file* file)
+{
+	struct device_data* data = file->private_data;
+
+	dev_info(&data->dev->dev, "releasing device\n");
+
+	mutex_lock(&data->lock);
+
+	kfree(data->buf);
+	data->buf = NULL;
+
+	if (--data->refs == 0)
+		kfree(data);
+
+	mutex_unlock(&data->lock);
+
+	return 0;
+}
+
 static const struct file_operations fops = {
 	.owner = THIS_MODULE,
+	.open = &it8951_open,
+	.release = &it8951_release
 };
 
 static_assert(MAX_DEVICES > 0);
@@ -77,6 +146,7 @@ static int probe_device(struct spi_device* dev)
 
 	mutex_init(&data->lock);
 	data->dev = dev;
+	data->buf = NULL;
 	data->refs = 1;
 
 	if (IS_ERR(data->pin_rset = gpiod_get(&dev->dev, "RESET_N",
