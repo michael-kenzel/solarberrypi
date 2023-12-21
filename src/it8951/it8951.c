@@ -5,6 +5,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
@@ -21,11 +23,17 @@ static struct class device_class = {
 };
 
 struct device_data {
-	struct gpio_desc* pin_rset;
+	struct mutex lock;
 	struct gpio_desc* pin_hrdy;
-	struct cdev cdev;
+	struct spi_device* dev;
+	struct gpio_desc* pin_rset;
 	dev_t devnum;
+	struct list_head node;
+	int refs;
 };
+
+static DEFINE_MUTEX(devices_lock);
+static LIST_HEAD(devices);
 
 static const struct file_operations fops = {
 	.owner = THIS_MODULE,
@@ -33,7 +41,8 @@ static const struct file_operations fops = {
 
 static_assert(MAX_DEVICES > 0);
 
-static dev_t dev_range_first;
+static struct cdev cdev;
+static dev_t devnum_start;
 static DECLARE_BITMAP(minors, MAX_DEVICES);
 
 static int probe_device(struct spi_device* dev)
@@ -66,6 +75,9 @@ static int probe_device(struct spi_device* dev)
 		goto failed_alloc_data;
 	}
 
+	mutex_init(&data->lock);
+	data->dev = dev;
+	data->refs = 1;
 
 	if (IS_ERR(data->pin_rset = gpiod_get(&dev->dev, "RESET_N",
 	                                      GPIOD_OUT_HIGH))) {
@@ -81,6 +93,10 @@ static int probe_device(struct spi_device* dev)
 		goto failed_alloc_hrdy;
 	}
 
+	INIT_LIST_HEAD(&data->node);
+
+	mutex_lock(&devices_lock);
+
 	if ((minor = find_first_zero_bit(minors, MAX_DEVICES))
 	    >= MAX_DEVICES) {
 		dev_err(&dev->dev, "failed to allocate device minor number\n");
@@ -89,15 +105,7 @@ static int probe_device(struct spi_device* dev)
 	}
 
 	set_bit(minor, minors);
-	data->devnum = MKDEV(MAJOR(dev_range_first), MINOR(minor));
-
-	cdev_init(&data->cdev, &fops);
-	data->cdev.owner = THIS_MODULE;
-
-	if ((result = cdev_add(&data->cdev, data->devnum, 1)) < 0) {
-		pr_err("failed to register character device\n");
-		goto failed_register_cdev;
-	}
+	data->devnum = MKDEV(MAJOR(devnum_start), MINOR(minor));
 
 	device = device_create(&device_class, &dev->dev,
 	                       data->devnum, data,
@@ -113,17 +121,20 @@ static int probe_device(struct spi_device* dev)
 
 	spi_set_drvdata(dev, data);
 
+	list_add(&data->node, &devices);
+
 	dev_info(&dev->dev, "created device %d:%d\n",
 	         MAJOR(data->devnum), MINOR(data->devnum));
+
+	mutex_unlock(&devices_lock);
 
 	return 0;
 
 	device_destroy(&device_class, data->devnum);
 failed_create_device:
-	cdev_del(&data->cdev);
-failed_register_cdev:
 	clear_bit(MINOR(data->devnum), minors);
 failed_alloc_dev_num:
+	mutex_unlock(&devices_lock);
 	gpiod_put(data->pin_hrdy);
 failed_alloc_hrdy:
 	gpiod_put(data->pin_rset);
@@ -141,12 +152,23 @@ static void remove_device(struct spi_device* dev)
 	dev_info(&dev->dev, "removing device %d:%d\n",
 	         MAJOR(data->devnum), MINOR(data->devnum));
 
+	mutex_lock(&devices_lock);
+	list_del(&data->node);
+	mutex_unlock(&devices_lock);
+
+	mutex_lock(&data->lock);
+	data->dev = NULL;
+	mutex_unlock(&data->lock);
+
 	device_destroy(&device_class, data->devnum);
-	cdev_del(&data->cdev);
 	clear_bit(MINOR(data->devnum), minors);
 	gpiod_put(data->pin_hrdy);
 	gpiod_put(data->pin_rset);
-	kfree(data);
+
+	mutex_lock(&data->lock);
+	if (--data->refs == 0)
+		kfree(data);
+	mutex_unlock(&data->lock);
 }
 
 static const struct of_device_id of_match_table[] = {
@@ -175,15 +197,23 @@ int __init init_driver(void)
 {
 	int result;
 
-	if ((result = alloc_chrdev_region(&dev_range_first, 0,
-	                                  MAX_DEVICES, "it8951")) < 0) {
+	if ((result = alloc_chrdev_region(&devnum_start, 0, MAX_DEVICES,
+	                                  "it8951")) < 0) {
 		pr_err("failed to allocate chrdev region\n");
 		goto failed_alloc_chrdev_region;
 	}
 
 	pr_info("using chrdev region %d:%d through %d:%d\n",
-	        MAJOR(dev_range_first), 0,
-	        MAJOR(dev_range_first), MAX_DEVICES - 1);
+	        MAJOR(devnum_start), 0,
+	        MAJOR(devnum_start), MAX_DEVICES - 1);
+
+	cdev_init(&cdev, &fops);
+	cdev.owner = THIS_MODULE;
+
+	if ((result = cdev_add(&cdev, devnum_start, MAX_DEVICES)) < 0) {
+		pr_err("failed to register character device\n");
+		goto failed_register_cdev;
+	}
 
 	if ((result = class_register(&device_class)) < 0) {
 		pr_err("failed to register class\n");
@@ -201,7 +231,9 @@ int __init init_driver(void)
 failed_register_driver:
 	class_unregister(&device_class);
 failed_register_class:
-	unregister_chrdev_region(dev_range_first, MAX_DEVICES);
+	cdev_del(&cdev);
+failed_register_cdev:
+	unregister_chrdev_region(devnum_start, MAX_DEVICES);
 failed_alloc_chrdev_region:
 	return result;
 }
@@ -210,7 +242,8 @@ void __exit cleanup_driver(void)
 {
 	spi_unregister_driver(&driver);
 	class_unregister(&device_class);
-	unregister_chrdev_region(dev_range_first, MAX_DEVICES);
+	cdev_del(&cdev);
+	unregister_chrdev_region(devnum_start, MAX_DEVICES);
 }
 
 module_init(init_driver)
