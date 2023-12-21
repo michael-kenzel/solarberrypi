@@ -1,5 +1,4 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -44,6 +43,8 @@ static int probe_device(struct spi_device* dev)
 	int minor;
 	struct device* device;
 
+	dev_info(&dev->dev, "probing\n");
+
 	dev->max_speed_hz = 12000000;
 	dev->bits_per_word = 8;
 	dev->mode = 0;
@@ -59,15 +60,12 @@ static int probe_device(struct spi_device* dev)
 		goto failed_spi_setup;
 	}
 
-	data = kmalloc(sizeof(*data), GFP_KERNEL);
-
-	if (!data) {
+	if (!(data = kmalloc(sizeof(*data), GFP_KERNEL))) {
 		dev_err(&dev->dev, "failed to allocate per-device data\n");
 		result = -ENOMEM;
 		goto failed_alloc_data;
 	}
 
-	spi_set_drvdata(dev, data);
 
 	if (IS_ERR(data->pin_rset = gpiod_get(&dev->dev, "RESET_N",
 	                                      GPIOD_OUT_HIGH))) {
@@ -85,7 +83,7 @@ static int probe_device(struct spi_device* dev)
 
 	if ((minor = find_first_zero_bit(minors, MAX_DEVICES))
 	    >= MAX_DEVICES) {
-		dev_err(&dev->dev, "failed to allocate minor number\n");
+		dev_err(&dev->dev, "failed to allocate device minor number\n");
 		result = -ENODEV;
 		goto failed_alloc_dev_num;
 	}
@@ -113,9 +111,10 @@ static int probe_device(struct spi_device* dev)
 		goto failed_create_device;
 	}
 
-	dev_info(&dev->dev, "created device %d:%d -> it8951-spi%d.%d\n",
-	         MAJOR(data->devnum), MINOR(data->devnum),
-	         dev->master->bus_num, dev->chip_select);
+	spi_set_drvdata(dev, data);
+
+	dev_info(&dev->dev, "created device %d:%d\n",
+	         MAJOR(data->devnum), MINOR(data->devnum));
 
 	return 0;
 
