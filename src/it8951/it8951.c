@@ -37,6 +37,72 @@ struct device_data {
 static DEFINE_MUTEX(devices_lock);
 static LIST_HEAD(devices);
 
+static struct device_data* device_acquire(struct file* file)
+{
+	struct device_data* data = file->private_data;
+
+	mutex_lock(&data->lock);
+
+	if (!data->dev) {
+		mutex_unlock(&data->lock);
+		return ERR_PTR(-ESHUTDOWN);
+	}
+
+	return data;
+}
+
+static void device_release(struct device_data* data)
+{
+	mutex_unlock(&data->lock);
+}
+
+static ssize_t it8951_read(struct file* file, char __user* dest,
+                           size_t size, loff_t* offset)
+{
+	struct device_data* data = device_acquire(file);
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	device_release(data);
+
+	return 0;
+}
+
+static ssize_t it8951_write(struct file* file, const char __user* dest,
+                            size_t size, loff_t* offset)
+{
+	struct device_data* data = device_acquire(file);
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	device_release(data);
+
+	return 0;
+}
+
+static long it8951_ioctl(struct file* file, unsigned int cmd, unsigned long arg)
+{
+	int result = 0;
+	struct device_data* data = device_acquire(file);
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	if (_IOC_TYPE(cmd) != IT8951_IOC_MAGIC) {
+		result = -ENOTTY;
+		goto fail;
+	}
+
+	switch (cmd) {
+	}
+
+fail:
+	device_release(data);
+	return result;
+}
+
 static int it8951_open(struct inode* inode, struct file* file)
 {
 	int result = 0;
@@ -104,6 +170,9 @@ static int it8951_release(struct inode* inode, struct file* file)
 
 static const struct file_operations fops = {
 	.owner = THIS_MODULE,
+	.read = &it8951_read,
+	.write = &it8951_write,
+	.unlocked_ioctl = &it8951_ioctl,
 	.open = &it8951_open,
 	.release = &it8951_release
 };
