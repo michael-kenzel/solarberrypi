@@ -71,7 +71,7 @@ static void it8951_wait_ready(struct device_data* data)
 	while (!gpiod_get_value_cansleep(data->pin_hrdy));
 }
 
-static ssize_t it8951_read(struct file* file, char __user* dest,
+static ssize_t it8951_read(struct file* file, char __user* dst,
                            size_t size, loff_t* offset)
 {
 	struct device_data* data = device_acquire(file);
@@ -84,7 +84,7 @@ static ssize_t it8951_read(struct file* file, char __user* dest,
 	return 0;
 }
 
-static ssize_t it8951_write(struct file* file, const char __user* dest,
+static ssize_t it8951_write(struct file* file, const char __user* src,
                             size_t size, loff_t* offset)
 {
 	struct device_data* data = device_acquire(file);
@@ -97,7 +97,8 @@ static ssize_t it8951_write(struct file* file, const char __user* dest,
 	return 0;
 }
 
-static long it8951_ioctl(struct file* file, unsigned int cmd, unsigned long arg)
+static long it8951_ioctl(struct file* file, unsigned int cmd,
+                         unsigned long arg)
 {
 	int result = 0;
 	struct device_data* data = device_acquire(file);
