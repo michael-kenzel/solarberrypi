@@ -1,0 +1,1 @@
+SUBSYSTEM=="it8951", GROUP="epaper", MODE="0660"
