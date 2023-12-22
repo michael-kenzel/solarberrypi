@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/list.h>
+#include <linux/delay.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/fs.h>
@@ -15,6 +16,8 @@
 #include <linux/spi/spi.h>
 
 #include <linux/printk.h>
+
+#include "it8951.h"
 
 #define MAX_DEVICES 64
 #define FIFO_SIZE 2048
@@ -54,6 +57,18 @@ static struct device_data* device_acquire(struct file* file)
 static void device_release(struct device_data* data)
 {
 	mutex_unlock(&data->lock);
+}
+
+static void it8951_reset(struct device_data* data)
+{
+	gpiod_set_value_cansleep(data->pin_rset, 1);
+	udelay(100);
+	gpiod_set_value_cansleep(data->pin_rset, 0);
+}
+
+static void it8951_wait_ready(struct device_data* data)
+{
+	while (!gpiod_get_value_cansleep(data->pin_hrdy));
 }
 
 static ssize_t it8951_read(struct file* file, char __user* dest,
@@ -96,6 +111,9 @@ static long it8951_ioctl(struct file* file, unsigned int cmd, unsigned long arg)
 	}
 
 	switch (cmd) {
+	case IT8951_IOCTL_RESET:
+		it8951_reset(data);
+		break;
 	}
 
 fail:
@@ -219,7 +237,7 @@ static int probe_device(struct spi_device* dev)
 	data->refs = 1;
 
 	if (IS_ERR(data->pin_rset = gpiod_get(&dev->dev, "RESET_N",
-	                                      GPIOD_OUT_HIGH))) {
+	                                      GPIOD_OUT_LOW))) {
 		dev_err(&dev->dev, "failed to allocate reset pin\n");
 		result = PTR_ERR(data->pin_rset);
 		goto failed_alloc_reset;
