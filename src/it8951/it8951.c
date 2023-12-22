@@ -71,6 +71,51 @@ static void it8951_wait_ready(struct device_data* data)
 	while (!gpiod_get_value_cansleep(data->pin_hrdy));
 }
 
+static int it8951_send_preamble(struct device_data* data, unsigned short prmbl)
+{
+	__u8 bytes[] = { (__u8)(prmbl >> 8), (__u8)(prmbl) };
+
+	struct spi_transfer transfer = {
+		.tx_buf = bytes,
+		.len = sizeof(bytes),
+		.cs_change = 1
+	};
+
+	struct spi_message msg;
+
+	spi_message_init_with_transfers(&msg, &transfer, 1);
+
+	it8951_wait_ready(data);
+	return spi_sync_locked(data->dev, &msg);
+}
+
+static int it8951_send_command(struct device_data* data, unsigned short cmd)
+{
+	int result;
+	__u8 bytes[] = { (__u8)(cmd >> 8), (__u8)(cmd) };
+
+	struct spi_transfer transfer = {
+		.tx_buf = bytes,
+		.len = sizeof(bytes)
+	};
+
+	struct spi_message msg;
+
+	spi_message_init_with_transfers(&msg, &transfer, 1);
+
+	spi_bus_lock(data->dev->controller);
+
+	if ((result = it8951_send_preamble(data, 0x6000)) < 0)
+		goto fail;
+
+	it8951_wait_ready(data);
+	result = spi_sync_locked(data->dev, &msg);
+
+fail:
+	spi_bus_unlock(data->dev->controller);
+	return result;
+}
+
 static ssize_t it8951_read(struct file* file, char __user* dst,
                            size_t size, loff_t* offset)
 {
@@ -115,6 +160,14 @@ static long it8951_ioctl(struct file* file, unsigned int cmd,
 	case IT8951_IOCTL_RESET:
 		it8951_reset(data);
 		break;
+
+	case IT8951_IOCTL_COMMAND:
+		result = it8951_send_command(data, (__u16)arg);
+		break;
+
+	default:
+		result = -ENOTTY;
+		goto fail;
 	}
 
 fail:
