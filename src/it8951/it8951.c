@@ -62,6 +62,7 @@ static void device_release(struct device_data* data)
 
 static void it8951_reset(struct device_data* data)
 {
+	dev_info(&data->dev->dev, "resetting device\n");
 	gpiod_set_value_cansleep(data->pin_rset, 1);
 	udelay(100);
 	gpiod_set_value_cansleep(data->pin_rset, 0);
