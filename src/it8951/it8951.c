@@ -128,6 +128,64 @@ fail:
 	return result;
 }
 
+static ssize_t read_slow(struct file* file, char __user* dst,
+                         size_t size, loff_t* offset)
+{
+	int result;
+	struct device_data* data = device_acquire(file);
+	struct spi_transfer transfer;
+	struct spi_message msg;
+	size_t bytes_read = 0;
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	spi_message_init_with_transfers(&msg, &transfer, 1);
+
+	spi_bus_lock(data->dev->controller);
+
+	if ((result = send_preamble_locked(data, 0x1000)) < 0)
+		goto fail;
+
+	__u8 buffer[2];
+	transfer.len = 2;
+	transfer.rx_buf = buffer;
+	transfer.cs_change = 1;
+
+	if ((result = wait_ready(data)) < 0)
+		goto fail;
+
+	if ((result = spi_sync_locked(data->dev, &msg)) < 0)
+		goto fail;
+
+	do {
+		transfer.cs_change = (size > 2);
+		transfer.len = (transfer.cs_change) ? 2 : size;
+
+		if ((result = wait_ready(data)) < 0)
+			goto fail;
+
+		if ((result = spi_sync_locked(data->dev, &msg)) < 0)
+			goto fail;
+
+		if (put_user(dst, data->buf, transfer.len) != 0) {
+			result = -EFAULT;
+			goto fail;
+		}
+
+		dst += transfer.len;
+		size -= 2;
+		bytes_read += transfer.len;
+	} while (transfer.cs_change);
+
+	result = bytes_read;
+
+fail:
+	spi_bus_unlock(data->dev->controller);
+	device_release(data);
+	return result;
+}
+
 static ssize_t it8951_read(struct file* file, char __user* dst,
                            size_t size, loff_t* offset)
 {
