@@ -130,27 +130,109 @@ fail:
 static ssize_t it8951_read(struct file* file, char __user* dst,
                            size_t size, loff_t* offset)
 {
+	static_assert(FIFO_SIZE >= 2);
+
+	int result;
 	struct device_data* data = device_acquire(file);
+	struct spi_transfer transfer;
+	struct spi_message msg;
+	size_t bytes_read = 0;
 
 	if (IS_ERR(data))
 		return PTR_ERR(data);
 
-	device_release(data);
+	spi_message_init_with_transfers(&msg, &transfer, 1);
 
-	return 0;
+	spi_bus_lock(data->dev->controller);
+
+	if ((result = it8951_send_preamble(data, 0x1000)) < 0)
+		goto fail;
+
+	transfer.len = 2;
+	transfer.cs_change = 1;
+	transfer.rx_buf = data->buf;
+
+	if ((result = it8951_wait_ready(data)) < 0)
+		goto fail;
+
+	if ((result = spi_sync_locked(data->dev, &msg)) < 0)
+		goto fail;
+
+	do {
+		transfer.cs_change = (size > FIFO_SIZE);
+		transfer.len = (transfer.cs_change) ? FIFO_SIZE : size;
+
+		if ((result = it8951_wait_ready(data)) < 0)
+			goto fail;
+
+		if ((result = spi_sync_locked(data->dev, &msg)) < 0)
+			goto fail;
+
+		if (copy_to_user(dst, data->buf, transfer.len) != 0) {
+			result = -EFAULT;
+			goto fail;
+		}
+
+		dst += transfer.len;
+		size -= FIFO_SIZE;
+		bytes_read += transfer.len;
+	} while (transfer.cs_change);
+
+	result = bytes_read;
+
+fail:
+	spi_bus_unlock(data->dev->controller);
+	device_release(data);
+	return result;
 }
 
 static ssize_t it8951_write(struct file* file, const char __user* src,
                             size_t size, loff_t* offset)
 {
+	int result;
 	struct device_data* data = device_acquire(file);
+	struct spi_transfer transfer;
+	struct spi_message msg;
+	size_t bytes_written = 0;
 
 	if (IS_ERR(data))
 		return PTR_ERR(data);
 
-	device_release(data);
+	spi_message_init_with_transfers(&msg, &transfer, 1);
 
-	return 0;
+	spi_bus_lock(data->dev->controller);
+
+	if ((result = it8951_send_preamble(data, 0x0000)) < 0)
+		goto fail;
+
+	transfer.tx_buf = data->buf;
+
+	do {
+		transfer.cs_change = (size > FIFO_SIZE);
+		transfer.len = (transfer.cs_change) ? FIFO_SIZE : size;
+
+		if (copy_from_user(data->buf, src, transfer.len) != 0) {
+			result = -EFAULT;
+			goto fail;
+		}
+
+		if ((result = it8951_wait_ready(data)) < 0)
+			goto fail;
+
+		if ((result = spi_sync_locked(data->dev, &msg)) < 0)
+			goto fail;
+
+		src += transfer.len;
+		size -= FIFO_SIZE;
+		bytes_written += transfer.len;
+	} while (transfer.cs_change);
+
+	result = bytes_written;
+
+fail:
+	spi_bus_unlock(data->dev->controller);
+	device_release(data);
+	return result;
 }
 
 static long it8951_ioctl(struct file* file, unsigned int cmd,
