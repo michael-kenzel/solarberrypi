@@ -60,7 +60,7 @@ static void device_release(struct device_data* data)
 	mutex_unlock(&data->lock);
 }
 
-static void it8951_reset(struct device_data* data)
+static void reset(struct device_data* data)
 {
 	dev_info(&data->dev->dev, "resetting device\n");
 	gpiod_set_value_cansleep(data->pin_rset, 1);
@@ -68,7 +68,7 @@ static void it8951_reset(struct device_data* data)
 	gpiod_set_value_cansleep(data->pin_rset, 0);
 }
 
-static int it8951_wait_ready(struct device_data* data)
+static int wait_ready(struct device_data* data)
 {
 	unsigned long timeout = jiffies + HZ;
 	while (!gpiod_get_value_cansleep(data->pin_hrdy))
@@ -77,7 +77,7 @@ static int it8951_wait_ready(struct device_data* data)
 	return 0;
 }
 
-static int it8951_send_preamble(struct device_data* data, unsigned short prmbl)
+static int send_preamble_locked(struct device_data* data, unsigned short prmbl)
 {
 	int result;
 
@@ -93,13 +93,13 @@ static int it8951_send_preamble(struct device_data* data, unsigned short prmbl)
 
 	spi_message_init_with_transfers(&msg, &transfer, 1);
 
-	if ((result = it8951_wait_ready(data)) < 0)
+	if ((result = wait_ready(data)) < 0)
 		return result;
 
 	return spi_sync_locked(data->dev, &msg);
 }
 
-static int it8951_send_command(struct device_data* data, unsigned short cmd)
+static int send_command(struct device_data* data, unsigned short cmd)
 {
 	int result;
 	__u8 bytes[] = { (__u8)(cmd >> 8), (__u8)(cmd) };
@@ -115,10 +115,10 @@ static int it8951_send_command(struct device_data* data, unsigned short cmd)
 
 	spi_bus_lock(data->dev->controller);
 
-	if ((result = it8951_send_preamble(data, 0x6000)) < 0)
+	if ((result = send_preamble_locked(data, 0x6000)) < 0)
 		goto fail;
 
-	if ((result = it8951_wait_ready(data)) < 0)
+	if ((result = wait_ready(data)) < 0)
 		goto fail;
 
 	result = spi_sync_locked(data->dev, &msg);
@@ -146,14 +146,14 @@ static ssize_t it8951_read(struct file* file, char __user* dst,
 
 	spi_bus_lock(data->dev->controller);
 
-	if ((result = it8951_send_preamble(data, 0x1000)) < 0)
+	if ((result = send_preamble_locked(data, 0x1000)) < 0)
 		goto fail;
 
 	transfer.len = 2;
 	transfer.cs_change = 1;
 	transfer.rx_buf = data->buf;
 
-	if ((result = it8951_wait_ready(data)) < 0)
+	if ((result = wait_ready(data)) < 0)
 		goto fail;
 
 	if ((result = spi_sync_locked(data->dev, &msg)) < 0)
@@ -163,7 +163,7 @@ static ssize_t it8951_read(struct file* file, char __user* dst,
 		transfer.cs_change = (size > FIFO_SIZE);
 		transfer.len = (transfer.cs_change) ? FIFO_SIZE : size;
 
-		if ((result = it8951_wait_ready(data)) < 0)
+		if ((result = wait_ready(data)) < 0)
 			goto fail;
 
 		if ((result = spi_sync_locked(data->dev, &msg)) < 0)
@@ -203,7 +203,7 @@ static ssize_t it8951_write(struct file* file, const char __user* src,
 
 	spi_bus_lock(data->dev->controller);
 
-	if ((result = it8951_send_preamble(data, 0x0000)) < 0)
+	if ((result = send_preamble_locked(data, 0x0000)) < 0)
 		goto fail;
 
 	transfer.tx_buf = data->buf;
@@ -217,7 +217,7 @@ static ssize_t it8951_write(struct file* file, const char __user* src,
 			goto fail;
 		}
 
-		if ((result = it8951_wait_ready(data)) < 0)
+		if ((result = wait_ready(data)) < 0)
 			goto fail;
 
 		if ((result = spi_sync_locked(data->dev, &msg)) < 0)
@@ -245,18 +245,18 @@ static long it8951_ioctl(struct file* file, unsigned int cmd,
 	if (IS_ERR(data))
 		return PTR_ERR(data);
 
-	if (_IOC_TYPE(cmd) != IT8951_IOC_MAGIC) {
-		result = -ENOTTY;
-		goto fail;
-	}
+	// if (_IOC_TYPE(cmd) != IT8951_IOC_MAGIC) {
+	// 	result = -ENOTTY;
+	// 	goto fail;
+	// }
 
 	switch (cmd) {
 	case IT8951_IOCTL_RESET:
-		it8951_reset(data);
+		reset(data);
 		break;
 
 	case IT8951_IOCTL_COMMAND:
-		result = it8951_send_command(data, (__u16)arg);
+		result = send_command(data, (__u16)arg);
 		break;
 
 	default:
@@ -358,7 +358,7 @@ static int probe_device(struct spi_device* dev)
 
 	dev_info(&dev->dev, "probing\n");
 
-	dev->max_speed_hz = 12000000;
+	dev->max_speed_hz = 24000000;
 	dev->bits_per_word = 8;
 	dev->mode = 0;
 	dev->cs_setup.value = 10;
