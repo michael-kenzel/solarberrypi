@@ -1,73 +1,40 @@
 #include <exception>
-#include <iostream>
+#include <chrono>
 #include <thread>
-#include <atomic>
+#include <iostream>
+#include <iomanip>
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
 #include <linux/types.h>
 #include <linux/spi/spidev.h>
 
-import display;
-import gpio;
-import io;
+using namespace std::literals;
 
+import display;
+import icp10125;
+import sht40;
+// import gpio;
+// import io;
 
 int main()
 {
 	try
 	{
-		// std::atomic<bool> run = true;
+		// IT8951 display;
 
-		// gpio::pin_set<
-		// 	{ 23, gpio::pin::flag::INPUT | gpio::pin::flag::EDGE_RISING | gpio::pin::flag::EDGE_FALLING }
-		// > pins("/dev/gpiochip0");
+		ICP10125 icp10125("/dev/i2c-1");
+		SHT40 sht45("/dev/i2c-1"), sht40("/dev/i2c-4");
 
-		// std::thread gpio_monitor([&]
-		// {
-		// 	while (run)
-		// 	{
-		// 		auto e = pins.wait_event();
+		while (true)
+		{
+			auto [p, t_3] = icp10125.measure();
+			auto [t_1, rh_1] = sht45.measure_high_precision();
+			auto [t_2, rh_2] = sht40.measure_high_precision();
 
-		// 		std::cout << e.timestamp_ns << ": " << e.offset << (static_cast<int>(e.id) == 1 ? "rising" : "falling") << '\n';
-		// 	}
-		// });
+			std::cout << std::chrono::utc_clock::now() << ' '
+			          << std::fixed << std::setprecision(1) << t_1 << ' ' << rh_1 << ' ' << t_2 << ' ' << rh_2 << ' ' << t_3 << ' ' << p / 100.0f << '\n';
 
-		// std::cout << "bla\n";
-
-		IT8951 display;
-
-		// auto fd = open("/dev/spidev0.0", O_RDWR);
-
-		// __u8 spi_mode = 0;
-		// io::throw_error(ioctl(fd, SPI_IOC_WR_MODE, &spi_mode));
-
-		// __u8 spi_lsb_first = 0;
-		// io::throw_error(ioctl(fd, SPI_IOC_WR_LSB_FIRST, &spi_lsb_first));
-
-		// __u8 spi_bits_per_word = 8;
-		// io::throw_error(ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &spi_bits_per_word));
-
-		// __u32 spi_max_speed = 100'000;
-		// io::throw_error(ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &spi_max_speed));
-
-
-		// unsigned char bytes[] = { 0x60, 0x00 };
-
-		// spi_ioc_transfer transfer = {
-		// 	.tx_buf = reinterpret_cast<__u64>(bytes),
-		// 	.len = sizeof(bytes),
-		// 	.cs_change = true
-		// };
-
-		// io::throw_error(ioctl(fd, SPI_IOC_MESSAGE(1), &transfer));
-
-		// pins.set<18>(true);
-		// usleep(1000);
-		// pins.set<18>(false);
-
-		// gpio_monitor.join();
+			std::this_thread::sleep_for(2s);
+		}
 	}
 	catch (const std::exception& e)
 	{
