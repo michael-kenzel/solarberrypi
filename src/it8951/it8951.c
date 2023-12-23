@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/list.h>
+#include <linux/jiffies.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -66,13 +67,19 @@ static void it8951_reset(struct device_data* data)
 	gpiod_set_value_cansleep(data->pin_rset, 0);
 }
 
-static void it8951_wait_ready(struct device_data* data)
+static int it8951_wait_ready(struct device_data* data)
 {
-	while (!gpiod_get_value_cansleep(data->pin_hrdy));
+	unsigned long timeout = jiffies + HZ;
+	while (!gpiod_get_value_cansleep(data->pin_hrdy))
+		if (time_after(jiffies, timeout))
+			return -EIO;
+	return 0;
 }
 
 static int it8951_send_preamble(struct device_data* data, unsigned short prmbl)
 {
+	int result;
+
 	__u8 bytes[] = { (__u8)(prmbl >> 8), (__u8)(prmbl) };
 
 	struct spi_transfer transfer = {
@@ -85,7 +92,9 @@ static int it8951_send_preamble(struct device_data* data, unsigned short prmbl)
 
 	spi_message_init_with_transfers(&msg, &transfer, 1);
 
-	it8951_wait_ready(data);
+	if ((result = it8951_wait_ready(data)) < 0)
+		return result;
+
 	return spi_sync_locked(data->dev, &msg);
 }
 
@@ -108,7 +117,9 @@ static int it8951_send_command(struct device_data* data, unsigned short cmd)
 	if ((result = it8951_send_preamble(data, 0x6000)) < 0)
 		goto fail;
 
-	it8951_wait_ready(data);
+	if ((result = it8951_wait_ready(data)) < 0)
+		goto fail;
+
 	result = spi_sync_locked(data->dev, &msg);
 
 fail:
