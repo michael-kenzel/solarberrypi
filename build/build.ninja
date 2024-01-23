@@ -1,14 +1,16 @@
+# cc = g++
+cc = aarch64-linux-gnu-g++-13
 cflags = -std=c++23 -Wall -Wextra -Wno-missing-field-initializers -g -O0
 
 rule cppdeps
-   command = g++ -MD -MF $out $cflags -E -x c++ $in > /dev/null
+   command = $cc -MD -MF $out $cflags -E -x c++ $in > /dev/null
 
 rule cpp
    # depfile = $out.d
-   command = g++ $cflags -fmodules-ts -c -x c++ $in -o $out
+   command = $cc $cflags -fmodules-ts -c -x c++ $in -o $out
 
 rule link
-   command = g++ $in -o $out
+   command = $cc $in -o $out
 
 rule dtc
    command = dtc -@ -I dts -O dtb -o $out $in
