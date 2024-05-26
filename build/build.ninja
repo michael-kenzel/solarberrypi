@@ -1,5 +1,6 @@
 # cc = g++
 cc = aarch64-linux-gnu-g++-13
+strip = aarch64-linux-gnu-strip
 cflags = -std=c++23 -Wall -Wextra -Wno-missing-field-initializers -g -O0
 
 rule cppdeps
@@ -11,6 +12,9 @@ rule cpp
 
 rule link
    command = $cc $in -o $out
+
+rule strip
+   command = $strip $in -o $out
 
 rule dtc
    command = dtc -@ -I dts -O dtb -o $out $in
@@ -34,4 +38,6 @@ build it8951.dtbo: dtc ../src/it8951/it8951.dts
 build compile_commands.json: compile_commands build.ninja
 
 build displaytest: link main.o it8951.o it8951-impl.o gpio.o io.o io-impl.o
-build lemonpi: link lemonpi.o icp10125.o sht40.o io.o io-impl.o
+
+build lemonpi-dbg: link lemonpi.o icp10125.o sht40.o io.o io-impl.o
+build lemonpi: strip lemonpi-dbg

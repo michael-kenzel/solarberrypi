@@ -5,10 +5,10 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "displaytest",
+			"name": "gdb local",
 			"type": "cppdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}/build/displaytest",
+			"program": "${workspaceFolder}/build/lemonpi-dbg",
 			"args": [],
 			"stopAtEntry": false,
 			"cwd": "${fileDirname}",
@@ -25,6 +25,39 @@
 					"description": "Set Disassembly Flavor to Intel",
 					"text": "-gdb-set disassembly-flavor intel",
 					"ignoreFailures": true
+				}
+			]
+		},
+		{
+			"preLaunchTask": "deploy",
+			"name": "gdb on lemon",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/lemonpi-dbg",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${fileDirname}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "gdb",
+			"miDebuggerPath": "/usr/bin/gdb-multiarch",
+			"miDebuggerServerAddress": "lemonberrypi:1234",
+			"useExtendedRemote": true,
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Set Disassembly Flavor to Intel",
+					"text": "-gdb-set disassembly-flavor intel",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Set Binary",
+					"text": "set remote exec-file lemonpi",
+					"ignoreFailures": false
 				}
 			]
 		}

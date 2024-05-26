@@ -14,6 +14,12 @@
 				"kind": "build",
 				"isDefault": true
 			}
+		},
+		{
+			"label": "deploy",
+			"type": "shell",
+			"command": "ssh lemon \"cat > lemonpi\" < \"${workspaceFolder}/build/lemonpi\"",
+			"problemMatcher": []
 		}
 	]
 }
