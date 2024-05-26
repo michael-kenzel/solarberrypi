@@ -29,9 +29,10 @@ build it8951.o: cpp ../src/it8951.ixx | gpio.o
 build it8951-impl.o: cpp ../src/it8951.cpp | it8951.o
 build icp10125.o: cpp ../src/icp10125/icp10125.ixx | io.o
 build sht40.o: cpp ../src/sht40/sht40.ixx | io.o
+build server.o: cpp ../src/server.ixx | io.o
 
 build main.o: cpp ../src/main.cpp | it8951.o
-build lemonpi.o: cpp ../src/lemonpi.cpp | icp10125.o sht40.o
+build lemonpi.o: cpp ../src/lemonpi.cpp | server.o icp10125.o sht40.o
 
 build it8951.dtbo: dtc ../src/it8951/it8951.dts
 
@@ -39,5 +40,5 @@ build compile_commands.json: compile_commands build.ninja
 
 build displaytest: link main.o it8951.o it8951-impl.o gpio.o io.o io-impl.o
 
-build lemonpi-dbg: link lemonpi.o icp10125.o sht40.o io.o io-impl.o
+build lemonpi-dbg: link lemonpi.o server.o icp10125.o sht40.o io.o io-impl.o
 build lemonpi: strip lemonpi-dbg
