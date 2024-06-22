@@ -15,6 +15,7 @@ module;
 export module icp10125;
 
 import io;
+import async;
 
 constexpr auto operator ""_b(unsigned long long value)
 {

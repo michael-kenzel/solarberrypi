@@ -29,15 +29,17 @@ rule dtc
 rule compile_commands
    command = ninja -f build.clang.ninja -t compdb > $out
 
+build async.pcm: cppm ../src/async.ixx
+build async.o: cppmooo async.pcm
 build io.pcm: cppm ../src/io.ixx
 build io.o: cppmooo io.pcm
 build gpio.pcm: cppm ../src/gpio.ixx | io.pcm
 build gpio.o: cppmooo gpio.pcm
 # build it8951.pcm: cpp ../src/it8951.ixx | io.pcm gpio.pcm
 # build it8951.o: cpp ../src/it8951.cpp | it8951.pcm
-build icp10125.pcm: cppm ../src/icp10125/icp10125.ixx | io.pcm
+build icp10125.pcm: cppm ../src/icp10125/icp10125.ixx | io.pcm async.pcm
 build icp10125.o: cppmooo icp10125.pcm
-build sht40.pcm: cppm ../src/sht40/sht40.ixx | io.pcm
+build sht40.pcm: cppm ../src/sht40/sht40.ixx | io.pcm async.pcm
 build sht40.o: cppmooo sht40.pcm
 build server.pcm: cppm ../src/server.ixx | io.pcm
 build server.o: cppmooo server.pcm
@@ -51,5 +53,5 @@ build compile_commands.json: compile_commands
 
 # build displaytest: link main.o it8951.o it8951-impl.o gpio.o io.o io-impl.o
 
-build lemonpi-dbg: link lemonpi.o server.o icp10125.o sht40.o io.o
+build lemonpi-dbg: link lemonpi.o server.o icp10125.o sht40.o io.o async.o
 build lemonpi: strip lemonpi-dbg

@@ -13,6 +13,7 @@ module;
 export module sht40;
 
 import io;
+import async;
 
 constexpr unsigned int deserialize_u16(std::array<std::byte, 2> bytes)
 {
