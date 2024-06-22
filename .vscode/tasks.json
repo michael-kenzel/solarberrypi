@@ -7,6 +7,10 @@
 			"label": "build",
 			"type": "shell",
 			"command": "ninja",
+			"args": [
+				"-f",
+				"build.clang.ninja"
+			],
 			"options": {
 				"cwd": "${workspaceFolder}/build"
 			},
