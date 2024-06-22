@@ -1,0 +1,12 @@
+[Unit]
+Description=lemonpi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/home/mikey/lemonpi/env/bin/python3 /home/mikey/lemonpi/lemon.py
+
+[Install]
+WantedBy=multi-user.target
