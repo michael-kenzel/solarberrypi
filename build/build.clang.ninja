@@ -41,11 +41,13 @@ build icp10125.pcm: cppm ../src/icp10125/icp10125.ixx | io.pcm async.pcm
 build icp10125.o: cppmooo icp10125.pcm
 build sht40.pcm: cppm ../src/sht40/sht40.ixx | io.pcm async.pcm
 build sht40.o: cppmooo sht40.pcm
+build mockup.pcm: cppm ../src/mockup.ixx | async.pcm
+build mockup.o: cppmooo mockup.pcm
 build server.pcm: cppm ../src/server.ixx | io.pcm
 build server.o: cppmooo server.pcm
 
 # build main.o: cpp ../src/main.cpp | it8951.o
-build lemonpi.o: cpp ../src/lemonpi.cpp | server.pcm icp10125.pcm sht40.pcm
+build lemonpi.o: cpp ../src/lemonpi.cpp | server.pcm mockup.pcm icp10125.pcm sht40.pcm
 
 # build it8951.dtbo: dtc ../src/it8951/it8951.dts
 
@@ -53,5 +55,5 @@ build compile_commands.json: compile_commands
 
 # build displaytest: link main.o it8951.o it8951-impl.o gpio.o io.o io-impl.o
 
-build lemonpi-dbg: link lemonpi.o server.o icp10125.o sht40.o io.o async.o
+build lemonpi-dbg: link lemonpi.o server.o mockup.o icp10125.o sht40.o io.o async.o
 build lemonpi: strip lemonpi-dbg

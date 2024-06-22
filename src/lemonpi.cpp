@@ -8,8 +8,12 @@
 
 using namespace std::literals;
 
+#if 0
 import icp10125;
 import sht40;
+#else
+import mockup;
+#endif
 
 import server;
 
