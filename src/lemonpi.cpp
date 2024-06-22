@@ -1,5 +1,6 @@
 #include <exception>
 #include <csignal>
+#include <cstdlib>
 #include <chrono>
 #include <thread>
 #include <iostream>
@@ -56,15 +57,17 @@ int main()
 		class server server(source);
 
 		source.run();
+
+		return 0;
 	}
 	catch (const std::exception& e)
 	{
 		std::cerr << "ERROR: " << e.what() << '\n';
-		return -1;
 	}
 	catch (...)
 	{
 		std::cerr << "ERROR: unknown exception\n";
-		return -128;
 	}
+
+	return EXIT_FAILURE;
 }

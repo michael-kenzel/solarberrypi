@@ -29,10 +29,10 @@
 			]
 		},
 		{
-			"preLaunchTask": "deploy",
 			"name": "gdb on lemon",
 			"type": "cppdbg",
 			"request": "launch",
+			"preLaunchTask": "deploy",
 			"program": "${workspaceFolder}/build/lemonpi-dbg",
 			"args": [],
 			"stopAtEntry": false,
